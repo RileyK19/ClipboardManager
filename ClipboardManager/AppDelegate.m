@@ -13,6 +13,7 @@
     self.clipboardHistory = [NSMutableArray array];
     self.maxHistorySize = 20;
     self.lastChangeCount = 0;
+    self.pinned = [NSMutableArray array];
     
     [self setupMenuBar];
     [self startClipboardMonitoring];
@@ -67,8 +68,16 @@
 #pragma mark - History Management
 
 - (void)addToHistory:(NSString *)text {
+    if ([self.clipboardHistory containsObject:text]) {
+        [self.clipboardHistory removeObject:text];
+    }
     if (_clipboardHistory.count >= _maxHistorySize) {
-        [_clipboardHistory removeObjectAtIndex:0];
+        for (NSInteger i = 0; i < self.clipboardHistory.count; i++) {
+            if (![self.pinned containsObject:self.clipboardHistory[i]]) {
+                [_clipboardHistory removeObjectAtIndex:i];
+                return;
+            }
+        }
     }
     [_clipboardHistory addObject:text];
     [self updateMenu];
@@ -84,14 +93,35 @@
      for (NSInteger i = 0; i < self.clipboardHistory.count; i++) {
          NSString *text = self.clipboardHistory[i];
          NSString *preview = [text substringToIndex:MIN(50, text.length)];
-    
-         NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:preview
+         
+         NSString *title = [self.pinned containsObject:text] ?
+                           [NSString stringWithFormat:@"📌 %@", preview] :
+                           preview;
+         NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:[title substringToIndex:MIN(50, title.length)]
                                                        action:@selector(copyHistoryItemToPasteboard:)
                                                 keyEquivalent:@""];
          [item setTarget:self];
          item.tag = i;
+         [item setAlternate:NO];
+         item.keyEquivalentModifierMask = 0;
+         
          [menu addItem:item];
-     }
+         
+         
+         NSString *title2 = [self.pinned containsObject:text] ?  // Use 'text', not 'preview'
+                           [NSString stringWithFormat:@"UNPIN: %@", preview] :
+                           [NSString stringWithFormat:@"PIN: %@", preview];
+//         NSMenuItem *deleteItem = [[NSMenuItem alloc] initWithTitle:[NSString stringWithFormat:@"Delete: %@", preview]
+//                                                             action:@selector(deleteHistoryItem:)
+//                                                      keyEquivalent:@""];
+         NSMenuItem *deleteItem = [[NSMenuItem alloc] initWithTitle:[title2 substringToIndex:MIN(50, title2.length)]
+                                                             action:@selector(pinItem:)
+                                                      keyEquivalent:@""];
+         [deleteItem setTarget:self];
+         deleteItem.tag = i;
+         [deleteItem setAlternate:YES];
+         deleteItem.keyEquivalentModifierMask = NSEventModifierFlagOption;
+         [menu addItem:deleteItem];     }
     
     [menu addItem:[NSMenuItem separatorItem]];
     
@@ -123,7 +153,40 @@
 }
 
 - (void)clearClipboardHistory:(id)sender {
-    self.clipboardHistory = [NSMutableArray array];
+//    self.clipboardHistory = [NSMutableArray array];
+    for (NSInteger i = 0; i < self.clipboardHistory.count; i++) {
+        if (![self.pinned containsObject:self.clipboardHistory[i]]) {
+            [_clipboardHistory removeObjectAtIndex:i];
+        }
+    }
+    [self updateMenu];
+}
+
+- (void)deleteHistoryItem:(id)sender {
+    NSButton *button = (NSButton *)sender;
+    NSInteger index = button.tag;
+    
+    if (index >= 0 && index < self.clipboardHistory.count) {
+        [self.clipboardHistory removeObjectAtIndex:index];
+        [self updateMenu];
+    }
+}
+
+
+- (void)pinItem:(id)sender {
+    NSMenuItem *button = (NSMenuItem *)sender;
+    NSInteger index = button.tag;
+    
+    if ([self.pinned containsObject:self.clipboardHistory[index]]) {
+        [self.pinned removeObject:self.clipboardHistory[index]];
+    } else if (self.pinned.count < self.maxHistorySize - 1) {
+        [self.pinned addObject:self.clipboardHistory[index]];
+    }
+    [self updateMenu];
+//    if (index >= 0 && index < self.clipboardHistory.count) {
+//        [self.clipboardHistory removeObjectAtIndex:index];
+//        [self updateMenu];
+//    }
 }
 
 @end

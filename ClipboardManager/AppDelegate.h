@@ -18,6 +18,7 @@
 
 // Storage for clipboard history
 @property (strong, nonatomic) NSMutableArray<NSString *> *clipboardHistory;
+@property (strong, nonatomic) NSMutableArray<NSString *> *pinned;
 
 // Maximum number of items to store
 @property (assign, nonatomic) NSInteger maxHistorySize;
@@ -29,5 +30,7 @@
 - (void)addToHistory:(NSString *)text;
 - (void)updateMenu;
 - (void)copyHistoryItemToPasteboard:(id)sender;
+- (void)deleteHistoryItem:(id)sender;
+- (void)pinItem:(id)sender;
 
 @end

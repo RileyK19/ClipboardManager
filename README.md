@@ -19,6 +19,7 @@ A powerful macOS menu bar clipboard manager built in Objective-C. Keep track of 
 - Press multiple times to keep going back
 - Clipboard updates immediately so you can paste right away
 - Selected item automatically moves to the top after 0.5 seconds of inactivity
+- **Toast notification** appears in the bottom-right corner showing what was copied
 
 ### 🎯 Smart Features
 - Duplicate detection - copying the same thing twice doesn't create duplicates
@@ -80,9 +81,10 @@ A powerful macOS menu bar clipboard manager built in Objective-C. Keep track of 
 
 ### Keyboard Cycling
 1. Press **Cmd+Ctrl+V** to cycle to the previous clipboard item
-2. Press again to keep going back through history
-3. Paste immediately with Cmd+V
-4. After 0.5 seconds, the selected item moves to the front of your history
+2. A HUD-style toast notification appears showing the copied text
+3. Press again to keep going back through history
+4. Paste immediately with Cmd+V
+5. After 0.5 seconds, the selected item moves to the front of your history
 
 ### Clearing History
 - Click "Clear" to remove all unpinned items
@@ -129,6 +131,16 @@ ClipboardManager/
 - Timer delays finalization (moving item to front)
 - Cancels and restarts timer on each press
 
+**Toast Notification**
+- Custom `NSPanel` with HUD-style appearance
+- Dark, rounded, semi-transparent bezel (matching macOS system HUDs)
+- Positioned in bottom-right corner
+- Fade in/out animations using `NSAnimationContext`
+- Auto-dismisses after 1.5 seconds
+- Non-activating panel (`NSNonactivatingPanelMask`) prevents focus stealing
+- Window level set to `NSScreenSaverWindowLevel` for always-on-top display
+- Thread-safe: UI updates dispatched to main queue
+
 ## Customization
 
 ### Change Hotkey
@@ -149,6 +161,40 @@ self.maxHistorySize = 20;  // Change to desired number
 In `cycleToPreviousClipboard`:
 ```objc
 scheduledTimerWithTimeInterval:0.5  // Change 0.5 to desired seconds
+```
+
+### Customize Toast Appearance
+In `showToast` method:
+
+**Position:**
+```objc
+// Bottom-right (default)
+CGFloat x = NSMaxX(screenFrame) - 320;
+CGFloat y = NSMinY(screenFrame) + 20;
+
+// Bottom-center (like volume HUD)
+CGFloat x = NSMidX(screenFrame) - 150;
+CGFloat y = NSMinY(screenFrame) + 100;
+
+// Center screen (like globe button)
+CGFloat x = NSMidX(screenFrame) - 150;
+CGFloat y = NSMidY(screenFrame) - 40;
+```
+
+**Size:**
+```objc
+NSMakeRect(0, 0, 300, 80)  // width, height
+```
+
+**Colors:**
+```objc
+toast.backgroundColor = [NSColor colorWithWhite:0.1 alpha:0.85];  // Dark transparent
+contentLabel.textColor = [NSColor whiteColor];  // Text color
+```
+
+**Display duration:**
+```objc
+dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), ...)  // 1.5 seconds
 ```
 
 ## Troubleshooting
@@ -173,6 +219,12 @@ scheduledTimerWithTimeInterval:0.5  // Change 0.5 to desired seconds
 ### Items appear multiple times
 - This is normal if you copy the same thing at different times
 - The duplicate detection only prevents consecutive duplicates
+
+### Toast notification doesn't appear
+- Toast shows when using Cmd+Ctrl+V hotkey only (not when clicking menu items)
+- Check console for "showToast called with:" log message
+- Verify main thread dispatch: should see "On main thread: 1"
+- If toast appears but immediately disappears, `toastPanel` property may be missing from header file
 
 ## Limitations
 
@@ -209,6 +261,22 @@ Built as a learning project to understand:
 - Event monitoring and Accessibility
 - Timer-based background tasks
 - Menu bar app architecture
+- Custom UI with NSPanel and animations
+- Thread safety and main queue dispatch
+- Window levels and focus management
+
+## New Objective-C Concepts Demonstrated
+
+### Toast Notification Implementation
+- **NSPanel**: Creating custom floating windows
+- **NSWindowStyleMask**: Borderless, non-activating panels
+- **Window Levels**: `NSScreenSaverWindowLevel` for always-on-top
+- **CALayer**: Rounded corners with `cornerRadius` and `masksToBounds`
+- **NSAnimationContext**: Fade in/out animations with completion handlers
+- **dispatch_async**: Ensuring UI updates happen on main thread
+- **dispatch_after**: Delayed execution with GCD
+- **Strong references**: Using `self.toastPanel` to prevent premature deallocation
+- **Focus management**: `NSNonactivatingPanelMask` and `setIsVisible:` vs `orderFront:`
 
 ---
 

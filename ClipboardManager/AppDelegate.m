@@ -6,6 +6,7 @@
 //
 
 #import "AppDelegate.h"
+#import <ApplicationServices/ApplicationServices.h>
 
 @implementation AppDelegate
 
@@ -14,13 +15,27 @@
     self.maxHistorySize = 20;
     self.lastChangeCount = 0;
     self.pinned = [NSMutableArray array];
+    self.currentHistoryIndex = 0;
     
     [self setupMenuBar];
     [self startClipboardMonitoring];
+    
+    // Check accessibility permission BEFORE registering hotkey
+    [self checkAccessibilityPermission];
+    [self registerHotkey];
 }
 
 - (void)applicationWillTerminate:(NSNotification *)aNotification {
     [self.clipboardTimer invalidate];
+    
+    if (self.cycleResetTimer) {
+        [self.cycleResetTimer invalidate];
+    }
+    
+    if (self.eventMonitor) {
+        [NSEvent removeMonitor:self.eventMonitor];
+        self.eventMonitor = nil;
+    }
 }
 
 - (BOOL)applicationSupportsSecureRestorableState:(NSApplication *)app {
@@ -60,6 +75,7 @@
 //         self.lastChangeCount = currentChangeCount;
 //         NSString *copiedText = [pasteboard stringForType:NSPasteboardTypeString];
          if (copiedText && [copiedText length] > 0) {
+             self.currentHistoryIndex = 0;
              [self addToHistory:copiedText];
          }
      }
@@ -72,14 +88,16 @@
         [self.clipboardHistory removeObject:text];
     }
     if (_clipboardHistory.count >= _maxHistorySize) {
-        for (NSInteger i = 0; i < self.clipboardHistory.count; i++) {
+//        for (NSInteger i = 0; i < self.clipboardHistory.count; i++) {
+        for (NSInteger i = self.clipboardHistory.count - 1; i >= 0; i--) {
             if (![self.pinned containsObject:self.clipboardHistory[i]]) {
                 [_clipboardHistory removeObjectAtIndex:i];
                 return;
             }
         }
     }
-    [_clipboardHistory addObject:text];
+//    [_clipboardHistory addObject:text];
+    [_clipboardHistory insertObject:text atIndex:0];
     [self updateMenu];
 }
 
@@ -125,7 +143,12 @@
     
     [menu addItem:[NSMenuItem separatorItem]];
     
-    
+    NSMenuItem *permissionItem = [[NSMenuItem alloc] initWithTitle:@"Check Accessibility Permission"
+                                                                action:@selector(checkAccessibilityPermission)
+                                                         keyEquivalent:@""];
+        [permissionItem setTarget:self];
+        [menu addItem:permissionItem];
+        
     NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:@"Clear"
                                                   action:@selector(clearClipboardHistory:)
                                            keyEquivalent:@""];
@@ -154,7 +177,7 @@
 
 - (void)clearClipboardHistory:(id)sender {
 //    self.clipboardHistory = [NSMutableArray array];
-    for (NSInteger i = 0; i < self.clipboardHistory.count; i++) {
+    for (NSInteger i = self.clipboardHistory.count-1; i >= 0; i--) {
         if (![self.pinned containsObject:self.clipboardHistory[i]]) {
             [_clipboardHistory removeObjectAtIndex:i];
         }
@@ -180,13 +203,85 @@
     if ([self.pinned containsObject:self.clipboardHistory[index]]) {
         [self.pinned removeObject:self.clipboardHistory[index]];
     } else if (self.pinned.count < self.maxHistorySize - 1) {
-        [self.pinned addObject:self.clipboardHistory[index]];
+//        [self.pinned addObject:self.clipboardHistory[index]];
+        [self.pinned insertObject:self.clipboardHistory[index] atIndex: 0];
     }
     [self updateMenu];
 //    if (index >= 0 && index < self.clipboardHistory.count) {
 //        [self.clipboardHistory removeObjectAtIndex:index];
 //        [self updateMenu];
 //    }
+}
+
+- (void)cycleToPreviousClipboard {
+    if (self.clipboardHistory.count == 0) {
+        return;
+    }
+    self.currentHistoryIndex = (self.currentHistoryIndex+1) % self.clipboardHistory.count;
+    
+    NSString *text = self.clipboardHistory[self.currentHistoryIndex];
+    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+    [pasteboard clearContents];
+    [pasteboard setString:text forType:NSPasteboardTypeString];
+    self.lastChangeCount = [pasteboard changeCount];
+    
+    self.cycleResetTimer = [NSTimer scheduledTimerWithTimeInterval:0.5
+                                                            target:self
+                                                          selector:@selector(finalizeCycleSelection)
+                                                          userInfo:nil
+                                                           repeats:NO];
+}
+
+- (void)finalizeCycleSelection {
+//    NSString *text = self.clipboardHistory[self.currentHistoryIndex];
+//    NSLog(@"%@", text);
+//    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+//    [pasteboard clearContents];
+//    [pasteboard setString:text forType:NSPasteboardTypeString];
+//    self.lastChangeCount = [pasteboard changeCount];
+//    [self.clipboardHistory removeObject:text];
+//    [self.clipboardHistory insertObject:text atIndex:0];
+    self.currentHistoryIndex = 0;
+    [self updateMenu];
+    self.cycleResetTimer = nil;
+}
+
+- (void)registerHotkey {
+    if (self.eventMonitor) {
+        return;
+    }
+    self.eventMonitor = [NSEvent addGlobalMonitorForEventsMatchingMask:NSEventMaskKeyDown
+                                          handler:^(NSEvent *event) {  // note: no return type, no return nil
+        BOOL isCmd = (event.modifierFlags & NSEventModifierFlagCommand) != 0;
+        BOOL isCtrl = (event.modifierFlags & NSEventModifierFlagControl) != 0;
+        BOOL isVKey = event.keyCode == 9;
+
+        if (isCmd && isCtrl && isVKey) {
+            [self cycleToPreviousClipboard];
+        }
+    }];
+}
+
+- (void)checkAccessibilityPermission {
+    NSDictionary *options = @{(__bridge id)kAXTrustedCheckOptionPrompt: @YES};
+    BOOL trusted = AXIsProcessTrustedWithOptions((__bridge CFDictionaryRef)options);
+    
+    if (!trusted) {
+        // Show user-friendly alert
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSAlert *alert = [[NSAlert alloc] init];
+            [alert setMessageText:@"Accessibility Permission Required"];
+            [alert setInformativeText:@"ClipboardManager needs Accessibility permission to detect the Cmd+Ctrl+V hotkey.\n\n1. Click 'Open System Settings'\n2. Find ClipboardManager in the list\n3. Toggle it ON\n4. Restart the app"];
+            [alert addButtonWithTitle:@"Open System Settings"];
+            [alert addButtonWithTitle:@"Cancel"];
+            
+            NSModalResponse response = [alert runModal];
+            if (response == NSAlertFirstButtonReturn) {
+                // Open System Settings to Accessibility pane
+                [[NSWorkspace sharedWorkspace] openURL:[NSURL URLWithString:@"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"]];
+            }
+        });
+    }
 }
 
 @end

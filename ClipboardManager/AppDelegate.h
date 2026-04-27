@@ -22,6 +22,9 @@
 
 // Maximum number of items to store
 @property (assign, nonatomic) NSInteger maxHistorySize;
+@property (assign, nonatomic) NSInteger currentHistoryIndex;
+@property (strong, nonatomic) NSTimer *cycleResetTimer;
+@property (strong, nonatomic) id eventMonitor;
 
 // Methods you'll implement
 - (void)setupMenuBar;
@@ -32,5 +35,8 @@
 - (void)copyHistoryItemToPasteboard:(id)sender;
 - (void)deleteHistoryItem:(id)sender;
 - (void)pinItem:(id)sender;
+- (void)cycleToPreviousClipboard;
+- (void)finalizeCycleSelection;
+- (void)registerHotkey;
 
 @end

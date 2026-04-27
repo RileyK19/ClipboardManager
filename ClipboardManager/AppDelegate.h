@@ -26,6 +26,9 @@
 @property (strong, nonatomic) NSTimer *cycleResetTimer;
 @property (strong, nonatomic) id eventMonitor;
 
+@property (strong, nonatomic) NSPanel *toastPanel;
+
+
 // Methods you'll implement
 - (void)setupMenuBar;
 - (void)startClipboardMonitoring;
@@ -38,5 +41,6 @@
 - (void)cycleToPreviousClipboard;
 - (void)finalizeCycleSelection;
 - (void)registerHotkey;
+- (void)showToast:(NSString *)text;
 
 @end

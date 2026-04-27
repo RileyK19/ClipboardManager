@@ -23,6 +23,7 @@
     // Check accessibility permission BEFORE registering hotkey
     [self checkAccessibilityPermission];
     [self registerHotkey];
+    [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
 }
 
 - (void)applicationWillTerminate:(NSNotification *)aNotification {
@@ -220,6 +221,21 @@
     self.currentHistoryIndex = (self.currentHistoryIndex+1) % self.clipboardHistory.count;
     
     NSString *text = self.clipboardHistory[self.currentHistoryIndex];
+    
+    NSString *preview = [text substringToIndex:MIN(50, text.length)];
+    if (text.length > 50) {
+        preview = [preview stringByAppendingString:@"..."];
+    }
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSLog(@"On main thread: %d", [NSThread isMainThread]);
+        NSLog(@"Screen: %@", NSStringFromRect([[NSScreen mainScreen] visibleFrame]));
+        NSLog(@"Toast frame origin will be: %f, %f", NSMaxX([[NSScreen mainScreen] visibleFrame]) - 320, NSMinY([[NSScreen mainScreen] visibleFrame]) + 20);
+        [self showToast:preview];
+        NSLog(@"Toast panel after show: %@", self.toastPanel);
+        NSLog(@"Toast alpha: %f", self.toastPanel.alphaValue);
+    });
+    
     NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
     [pasteboard clearContents];
     [pasteboard setString:text forType:NSPasteboardTypeString];
@@ -233,14 +249,14 @@
 }
 
 - (void)finalizeCycleSelection {
-//    NSString *text = self.clipboardHistory[self.currentHistoryIndex];
+    NSString *text = self.clipboardHistory[self.currentHistoryIndex];
 //    NSLog(@"%@", text);
 //    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
 //    [pasteboard clearContents];
 //    [pasteboard setString:text forType:NSPasteboardTypeString];
 //    self.lastChangeCount = [pasteboard changeCount];
-//    [self.clipboardHistory removeObject:text];
-//    [self.clipboardHistory insertObject:text atIndex:0];
+    [self.clipboardHistory removeObject:text];
+    [self.clipboardHistory insertObject:text atIndex:0];
     self.currentHistoryIndex = 0;
     [self updateMenu];
     self.cycleResetTimer = nil;
@@ -284,4 +300,84 @@
     }
 }
 
+- (void)showToast:(NSString *)text {
+    NSLog(@"showToast called with: %@", text);
+    // Create HUD-style panel
+    self.toastPanel = [[NSPanel alloc] initWithContentRect:NSMakeRect(0, 0, 300, 80)
+                                                 styleMask:NSWindowStyleMaskBorderless | NSNonactivatingPanelMask
+                                                   backing:NSBackingStoreBuffered
+                                                     defer:NO];
+    self.toastPanel.becomesKeyOnlyIfNeeded = YES;
+    self.toastPanel.floatingPanel = YES;
+    NSPanel *toast = self.toastPanel;
+    
+    // HUD styling - dark, rounded, semi-transparent
+    toast.backgroundColor = [NSColor colorWithWhite:0.1 alpha:0.85];
+    toast.opaque = NO;
+    toast.hasShadow = YES;
+    toast.level = NSScreenSaverWindowLevel;
+    toast.ignoresMouseEvents = YES;
+    
+    // Rounded corners
+    toast.contentView.wantsLayer = YES;
+    toast.contentView.layer.cornerRadius = 12.0;
+    toast.contentView.layer.masksToBounds = YES;
+    
+    // Position in bottom-right corner
+    NSRect screenFrame = [[NSScreen mainScreen] visibleFrame];
+    CGFloat x = NSMaxX(screenFrame) - 320;  // 20px from right edge
+    CGFloat y = NSMinY(screenFrame) + 20;    // 20px from bottom
+    [toast setFrameOrigin:NSMakePoint(x, y)];
+    
+    // Title label
+    NSTextField *titleLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 50, 260, 20)];
+    titleLabel.stringValue = @"Clipboard";
+    titleLabel.bezeled = NO;
+    titleLabel.drawsBackground = NO;
+    titleLabel.editable = NO;
+    titleLabel.selectable = NO;
+    titleLabel.textColor = [NSColor colorWithWhite:0.7 alpha:1.0];
+    titleLabel.font = [NSFont systemFontOfSize:11];
+    [toast.contentView addSubview:titleLabel];
+    
+    // Content label
+    NSTextField *contentLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 15, 260, 30)];
+    contentLabel.stringValue = text;
+    contentLabel.bezeled = NO;
+    contentLabel.drawsBackground = NO;
+    contentLabel.editable = NO;
+    contentLabel.selectable = NO;
+    contentLabel.textColor = [NSColor whiteColor];
+    contentLabel.font = [NSFont systemFontOfSize:14 weight:NSFontWeightMedium];
+    [toast.contentView addSubview:contentLabel];
+    
+    // Fade in animation
+    toast.alphaValue = 1.0;
+    NSLog(@"Activation policy: %ld", [NSApp activationPolicy]);
+    [toast setIsVisible:YES];
+    
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+        context.duration = 0.2;
+        toast.animator.alphaValue = 1.0;
+    } completionHandler:^{
+        // Auto-dismiss after 1.5 seconds
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            [NSAnimationContext runAnimationGroup:^(NSAnimationContext *context) {
+                context.duration = 0.3;
+                toast.animator.alphaValue = 0.0;
+            } completionHandler:^{
+                [toast close];
+                self.toastPanel = nil;
+            }];
+        });
+    }];
+}
+
 @end
+
+
+
+
+
+
+

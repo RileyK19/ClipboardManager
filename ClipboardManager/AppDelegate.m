@@ -228,12 +228,7 @@
     }
 
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSLog(@"On main thread: %d", [NSThread isMainThread]);
-        NSLog(@"Screen: %@", NSStringFromRect([[NSScreen mainScreen] visibleFrame]));
-        NSLog(@"Toast frame origin will be: %f, %f", NSMaxX([[NSScreen mainScreen] visibleFrame]) - 320, NSMinY([[NSScreen mainScreen] visibleFrame]) + 20);
         [self showToast:preview];
-        NSLog(@"Toast panel after show: %@", self.toastPanel);
-        NSLog(@"Toast alpha: %f", self.toastPanel.alphaValue);
     });
     
     NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
@@ -262,6 +257,14 @@
     self.cycleResetTimer = nil;
 }
 
+- (void)showToastCurrent {
+    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+    NSString *text = [pasteboard stringForType:NSPasteboardTypeString];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self showToast:text];
+    });
+}
+
 - (void)registerHotkey {
     if (self.eventMonitor) {
         return;
@@ -271,9 +274,13 @@
         BOOL isCmd = (event.modifierFlags & NSEventModifierFlagCommand) != 0;
         BOOL isCtrl = (event.modifierFlags & NSEventModifierFlagControl) != 0;
         BOOL isVKey = event.keyCode == 9;
+        BOOL isCKey = event.keyCode == 8;
 
         if (isCmd && isCtrl && isVKey) {
             [self cycleToPreviousClipboard];
+        }
+        if (isCmd && isCtrl && isCKey) {
+            [self showToastCurrent];
         }
     }];
 }
